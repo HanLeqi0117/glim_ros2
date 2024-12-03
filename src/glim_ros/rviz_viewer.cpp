@@ -29,7 +29,7 @@ RvizViewer::RvizViewer() : logger(create_module_logger("rviz")) {
   map_frame_id = config.param<std::string>("glim_ros", "map_frame_id", "map");
   publish_imu2lidar = config.param<bool>("glim_ros", "publish_imu2lidar", true);
   tf_time_offset = config.param<double>("glim_ros", "tf_time_offset", 1e-6);
-  publish_tf = config.param<double>("glim_ros", "publish_tf", false);
+  publish_tf = config.param<bool>("glim_ros", "publish_tf", false);
 
   last_globalmap_pub_time = rclcpp::Clock(rcl_clock_type_t::RCL_ROS_TIME).now();
   trajectory.reset(new TrajectoryManager);
