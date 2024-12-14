@@ -112,17 +112,18 @@ void RvizViewer::odometry_new_frame(const EstimationFrame::ConstPtr& new_frame) 
     quat_world_imu = Eigen::Quaterniond(T_world_imu.linear());
   }
 
-  // Publish transforms
-  const auto stamp = from_sec(new_frame->stamp);
-  const auto tf_stamp = from_sec(new_frame->stamp + tf_time_offset);
-
-  // Odom -> Base
-  geometry_msgs::msg::TransformStamped trans;
-  trans.header.stamp = tf_stamp;
-  trans.header.frame_id = odom_frame_id;
-  trans.child_frame_id = base_frame_id;
 
   if (publish_tf) {
+    // Publish transforms
+    const auto stamp = from_sec(new_frame->stamp);
+    const auto tf_stamp = from_sec(new_frame->stamp + tf_time_offset);
+
+    // Odom -> Base
+    geometry_msgs::msg::TransformStamped trans;
+    trans.header.stamp = tf_stamp;
+    trans.header.frame_id = odom_frame_id;
+    trans.child_frame_id = base_frame_id;
+    
     if (base_frame_id == imu_frame_id) {
       trans.transform.translation.x = T_odom_imu.translation().x();
       trans.transform.translation.y = T_odom_imu.translation().y();
