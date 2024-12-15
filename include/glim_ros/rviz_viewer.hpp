@@ -13,6 +13,7 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <robot_localization/srv/set_pose.hpp>
 
 #include <glim/odometry/estimation_frame.hpp>
 #include <glim/mapping/sub_map.hpp>
@@ -63,6 +64,8 @@ private:
   bool publish_imu2lidar;
   bool publish_tf;
   double tf_time_offset;
+  Eigen::Quaterniond q_diff(1.0, 0.0, 0.0, 0.0);
+  Eigen::Quaterniond q_source(1.0, 0.0, 0.0, 0.0);
 
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>> points_pub;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>> aligned_points_pub;
@@ -70,6 +73,7 @@ private:
 
   std::shared_ptr<rclcpp::Publisher<nav_msgs::msg::Odometry>> odom_pub;
   std::shared_ptr<rclcpp::Publisher<geometry_msgs::msg::PoseStamped>> pose_pub;
+  std::shared_ptr<rclcpp::Service<robot_localization::srv::SetPose>> set_pose_srv;
 
   std::mutex trajectory_mutex;
   std::unique_ptr<TrajectoryManager> trajectory;

@@ -78,6 +78,7 @@ std::vector<GenericTopicSubscription::Ptr> RvizViewer::create_subscriptions(rclc
   map_pub = node.create_publisher<sensor_msgs::msg::PointCloud2>("~/map", map_qos);
   odom_pub = node.create_publisher<nav_msgs::msg::Odometry>("~/odom", 10);
   pose_pub = node.create_publisher<geometry_msgs::msg::PoseStamped>("~/pose", 10);
+  set_pose_srv = node.create_service<robot_localization::srv::SetPose>("~/set_pose", std::bind(&RvizViewer::set_pose, this, _1, _2));
 
   return {};
 }
@@ -91,6 +92,7 @@ void RvizViewer::set_callbacks() {
 void RvizViewer::odometry_new_frame(const EstimationFrame::ConstPtr& new_frame) {
   const Eigen::Isometry3d T_odom_imu = new_frame->T_world_imu;
   const Eigen::Quaterniond quat_odom_imu(T_odom_imu.linear());
+  q_source = quat_odom_imu;
 
   const Eigen::Isometry3d T_lidar_imu = new_frame->T_lidar_imu;
   const Eigen::Quaterniond quat_lidar_imu(T_lidar_imu.linear());
@@ -315,6 +317,11 @@ void RvizViewer::globalmap_on_update_submaps(const std::vector<SubMap::Ptr>& sub
     auto points_msg = frame_to_pointcloud2(map_frame_id, now.seconds(), *merged);
     map_pub->publish(*points_msg);
   });
+}
+
+void RvizViewer::set_pose(const robot_localization::srv::SetPose::Request::SharedPtr req, robot_localization::srv::SetPose::Response::SharedPtr res) {
+  const auto q_target = Eigen::Quaterniond(req->pose.orientation.w, req->pose.orientation.x, req->pose.orientation.y, req->pose.orientation.z);
+  q_diff = q_target * q_source.conjugate();
 }
 
 void RvizViewer::invoke(const std::function<void()>& task) {
