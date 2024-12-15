@@ -34,6 +34,9 @@ RvizViewer::RvizViewer() : logger(create_module_logger("rviz")) {
   last_globalmap_pub_time = rclcpp::Clock(rcl_clock_type_t::RCL_ROS_TIME).now();
   trajectory.reset(new TrajectoryManager);
 
+  q_diff.setIdentity();
+  q_source.setIdentity();
+
   set_callbacks();
 
   kill_switch = false;
@@ -57,6 +60,9 @@ RvizViewer::~RvizViewer() {
 }
 
 std::vector<GenericTopicSubscription::Ptr> RvizViewer::create_subscriptions(rclcpp::Node& node) {
+  using std::placeholders::_1;
+  using std::placeholders::_2;
+
   tf_buffer = std::make_unique<tf2_ros::Buffer>(node.get_clock());
   tf_listener = std::make_unique<tf2_ros::TransformListener>(*tf_buffer);
   tf_broadcaster = std::make_unique<tf2_ros::TransformBroadcaster>(node);
@@ -114,26 +120,32 @@ void RvizViewer::odometry_new_frame(const EstimationFrame::ConstPtr& new_frame) 
     quat_world_imu = Eigen::Quaterniond(T_world_imu.linear());
   }
 
+  // Publish transforms
+  const auto stamp = from_sec(new_frame->stamp);
+  const auto tf_stamp = from_sec(new_frame->stamp + tf_time_offset);
 
   if (publish_tf) {
-    // Publish transforms
-    const auto stamp = from_sec(new_frame->stamp);
-    const auto tf_stamp = from_sec(new_frame->stamp + tf_time_offset);
-
     // Odom -> Base
     geometry_msgs::msg::TransformStamped trans;
     trans.header.stamp = tf_stamp;
     trans.header.frame_id = odom_frame_id;
     trans.child_frame_id = base_frame_id;
-    
+
+    Eigen::Quaterniond transformed_quat_odom_imu = q_diff * quat_odom_imu;
+    transformed_quat_odom_imu.normalize();
+
     if (base_frame_id == imu_frame_id) {
       trans.transform.translation.x = T_odom_imu.translation().x();
       trans.transform.translation.y = T_odom_imu.translation().y();
       trans.transform.translation.z = T_odom_imu.translation().z();
-      trans.transform.rotation.x = quat_odom_imu.x();
-      trans.transform.rotation.y = quat_odom_imu.y();
-      trans.transform.rotation.z = quat_odom_imu.z();
-      trans.transform.rotation.w = quat_odom_imu.w();
+      // trans.transform.rotation.x = quat_odom_imu.x();
+      // trans.transform.rotation.y = quat_odom_imu.y();
+      // trans.transform.rotation.z = quat_odom_imu.z();
+      // trans.transform.rotation.w = quat_odom_imu.w();
+      trans.transform.rotation.x = transformed_quat_odom_imu.x();
+      trans.transform.rotation.y = transformed_quat_odom_imu.y();
+      trans.transform.rotation.z = transformed_quat_odom_imu.z();
+      trans.transform.rotation.w = transformed_quat_odom_imu.w();
       tf_broadcaster->sendTransform(trans);
     } else {
       try {
@@ -147,14 +159,20 @@ void RvizViewer::odometry_new_frame(const EstimationFrame::ConstPtr& new_frame) 
 
         const Eigen::Isometry3d T_odom_base = T_odom_imu * T_imu_base;
         const Eigen::Quaterniond quat_odom_base(T_odom_base.linear());
+        Eigen::Quaterniond transformed_quat_odom_base = q_diff * quat_odom_base;
+        transformed_quat_odom_base.normalize();
 
         trans.transform.translation.x = T_odom_base.translation().x();
         trans.transform.translation.y = T_odom_base.translation().y();
         trans.transform.translation.z = T_odom_base.translation().z();
-        trans.transform.rotation.x = quat_odom_base.x();
-        trans.transform.rotation.y = quat_odom_base.y();
-        trans.transform.rotation.z = quat_odom_base.z();
-        trans.transform.rotation.w = quat_odom_base.w();
+        // trans.transform.rotation.x = quat_odom_base.x();
+        // trans.transform.rotation.y = quat_odom_base.y();
+        // trans.transform.rotation.z = quat_odom_base.z();
+        // trans.transform.rotation.w = quat_odom_base.w();
+        trans.transform.rotation.x = transformed_quat_odom_base.x();
+        trans.transform.rotation.y = transformed_quat_odom_base.y();
+        trans.transform.rotation.z = transformed_quat_odom_base.z();
+        trans.transform.rotation.w = transformed_quat_odom_base.w();
         tf_broadcaster->sendTransform(trans);
       } catch (const tf2::TransformException& e) {
         logger->warn("Failed to lookup transform from {} to {} (stamp={}.{}): {}", imu_frame_id, base_frame_id, stamp.sec, stamp.nanosec, e.what());
@@ -320,8 +338,16 @@ void RvizViewer::globalmap_on_update_submaps(const std::vector<SubMap::Ptr>& sub
 }
 
 void RvizViewer::set_pose(const robot_localization::srv::SetPose::Request::SharedPtr req, robot_localization::srv::SetPose::Response::SharedPtr res) {
-  const auto q_target = Eigen::Quaterniond(req->pose.orientation.w, req->pose.orientation.x, req->pose.orientation.y, req->pose.orientation.z);
-  q_diff = q_target * q_source.conjugate();
+  const auto q_target = Eigen::Quaterniond(req->pose.pose.pose.orientation.w, req->pose.pose.pose.orientation.x, req->pose.pose.pose.orientation.y, req->pose.pose.pose.orientation.z);
+  Eigen::Quaterniond q_delta = q_target * q_source.conjugate();
+  q_delta.normalize();
+
+  Eigen::Vector3d delta_euler = q_delta.toRotationMatrix().eulerAngles(0, 1, 2);
+  double delta_yaw = delta_euler[2];
+
+  double incremental_adjustment = 0.5 * delta_yaw;
+  q_diff = Eigen::AngleAxisd(incremental_adjustment, Eigen::Vector3d::UnitZ());
+  q_diff.normalize();
 }
 
 void RvizViewer::invoke(const std::function<void()>& task) {

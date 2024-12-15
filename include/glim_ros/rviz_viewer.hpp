@@ -43,6 +43,7 @@ private:
   void odometry_new_frame(const EstimationFrame::ConstPtr& new_frame);
   void globalmap_on_update_submaps(const std::vector<SubMap::Ptr>& submaps);
   void invoke(const std::function<void()>& task);
+  void set_pose(const robot_localization::srv::SetPose::Request::SharedPtr req, robot_localization::srv::SetPose::Response::SharedPtr res);
 
   void spin_once();
 
@@ -64,8 +65,8 @@ private:
   bool publish_imu2lidar;
   bool publish_tf;
   double tf_time_offset;
-  Eigen::Quaterniond q_diff(1.0, 0.0, 0.0, 0.0);
-  Eigen::Quaterniond q_source(1.0, 0.0, 0.0, 0.0);
+  Eigen::Quaterniond q_diff;
+  Eigen::Quaterniond q_source;
 
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>> points_pub;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>> aligned_points_pub;
